@@ -175,7 +175,8 @@ def optimal_threshold(frontier: pd.DataFrame) -> float:
     Returns:
         The cost-minimising PD cutoff.
     """
-    return float(frontier.loc[frontier["net_cost"].idxmin(), "threshold"])
+    best_row = int(frontier["net_cost"].to_numpy().argmin())
+    return float(frontier["threshold"].to_numpy()[best_row])
 
 
 def policy_summary(
