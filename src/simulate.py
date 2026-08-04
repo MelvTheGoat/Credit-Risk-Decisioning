@@ -52,7 +52,7 @@ separates them on its own.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import pandas as pd
@@ -311,6 +311,12 @@ def simulate_loan_book(config: SimulationConfig = DEFAULT_SIMULATION) -> pd.Data
     # approved but has no causal path to default.
     branch_capacity_index = rng.normal(0.0, 1.0, size=n)
 
+    # Latent loan-officer judgement. Never a model feature. When the
+    # private_signal_* parameters are non-zero this drives both the true
+    # default outcome and the legacy approval decision, which makes selection
+    # depend on something the model can never observe. See SimulationConfig.
+    officer_signal = rng.normal(0.0, 1.0, size=n)
+
     # ------------------------------------------------------- true PD (DGP) ---
     c = TRUE_COEFFICIENTS
     logit = (
@@ -335,6 +341,10 @@ def simulate_loan_book(config: SimulationConfig = DEFAULT_SIMULATION) -> pd.Data
     )
     logit += c.high_dti_cliff * (debt_to_income > c.high_dti_threshold)
     logit += c.thin_file_penalty * (credit_history_months < c.thin_file_months)
+
+    # Unobserved-by-the-model risk that the loan officer could see. Zero in the
+    # default (MAR) book.
+    logit += config.private_signal_default * officer_signal
 
     # Macro deterioration in the drifted vintages, plus mild seasonality so the
     # vintage curves are not perfectly flat.
@@ -364,6 +374,7 @@ def simulate_loan_book(config: SimulationConfig = DEFAULT_SIMULATION) -> pd.Data
         + 0.25 * _standardise(n_inquiries_6m.astype(float))
         + config.group_b_policy_penalty * is_group_b
         + 0.45 * branch_capacity_index
+        + config.private_signal_policy * officer_signal
         + rng.normal(0.0, config.legacy_policy_noise, size=n)
     )
     # Cut at the quantile that delivers the target approval rate exactly. A
@@ -396,6 +407,7 @@ def simulate_loan_book(config: SimulationConfig = DEFAULT_SIMULATION) -> pd.Data
             "product_type": product_type,
             "branch_capacity_index": np.round(branch_capacity_index, 4),
             # Oracle columns. A real book has none of these.
+            "officer_signal": np.round(officer_signal, 4),
             "income_true": np.round(income_true, 2),
             "pd_true": pd_true,
             "default_true": default_true,
@@ -416,6 +428,44 @@ def simulate_loan_book(config: SimulationConfig = DEFAULT_SIMULATION) -> pd.Data
         float(frame.loc[frame["approved"] == 0, "default_true"].mean()),
     )
     return frame
+
+
+def mnar_config(
+    config: SimulationConfig = DEFAULT_SIMULATION,
+    default_strength: float = 0.85,
+    policy_strength: float = 1.30,
+) -> SimulationConfig:
+    """Build a variant where selection depends on something the model cannot see.
+
+    In the default book the legacy policy acted only on features the model also
+    receives, so a model trained on approved applicants generalises to declined
+    ones. That is **selection on observables**, and reject inference has nothing
+    to repair.
+
+    This variant switches on a latent loan-officer judgement that drives both
+    the true default outcome and the approval decision, and is never a model
+    feature. Now the approved sample really is unrepresentative in a way no
+    amount of feature engineering can reach, and a correction has genuine work
+    to do.
+
+    Running both regimes is the point. The two produce opposite conclusions
+    about whether reject inference is worth doing, and **on a real book there is
+    no way to tell which regime you are in** — the evidence that would settle it
+    is precisely the missing counterfactual.
+
+    Args:
+        config: Base configuration to modify.
+        default_strength: Effect of the latent signal on the default logit.
+        policy_strength: Effect of the latent signal on the approval decision.
+
+    Returns:
+        A configuration with the private signal switched on.
+    """
+    return replace(
+        config,
+        private_signal_default=default_strength,
+        private_signal_policy=policy_strength,
+    )
 
 
 def split_by_vintage(

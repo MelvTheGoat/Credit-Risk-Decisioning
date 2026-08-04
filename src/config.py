@@ -208,7 +208,30 @@ class SimulationConfig:
         group_b_policy_penalty: Extra legacy-policy score penalty applied to
             group B, in logit units. This is the injected historical
             discrimination that reject inference must contend with.
+        private_signal_default: Effect on the true default logit of a latent
+            "loan officer judgement" signal that is **never a model feature**.
+        private_signal_policy: Effect of that same latent signal on the legacy
+            approval decision.
         seed: Base random seed.
+
+    Note:
+        The two ``private_signal_*`` parameters select the *selection regime*,
+        which is the single most important thing determining whether reject
+        inference can work at all:
+
+        * Both zero — **selection on observables** (MAR). The legacy policy
+          used only information the model can also see, so a model trained on
+          approved applicants generalises to the rejected ones and there is
+          nothing for reject inference to fix.
+        * Both non-zero — **selection on unobservables** (MNAR). The legacy
+          policy acted on a genuinely predictive signal the model never
+          receives, so the approved-only model is biased and a correction has
+          real work to do.
+
+        The default book is MAR. :func:`~src.simulate.mnar_config` builds the
+        MNAR variant, and the reject inference study runs both, because on a
+        real book you cannot tell which regime you are in — and that
+        uncertainty is the actual finding.
     """
 
     n_applicants: int = 30_000
@@ -222,6 +245,8 @@ class SimulationConfig:
     group_b_share: float = 0.42
     group_b_income_bias: float = 0.85
     group_b_policy_penalty: float = 0.55
+    private_signal_default: float = 0.0
+    private_signal_policy: float = 0.0
     seed: int = RANDOM_SEED
 
 
