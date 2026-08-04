@@ -127,6 +127,89 @@ def plot_reliability(
     plt.close(fig)
 
 
+def scorecard_gap_decomposition(
+    X_fit: pd.DataFrame,
+    y_fit: np.ndarray,
+    X_test: pd.DataFrame,
+    y_test: np.ndarray,
+    reference_predictions: dict[str, np.ndarray],
+) -> pd.DataFrame:
+    """Attribute the scorecard's AUC gap to binning versus additivity.
+
+    Three things separate a WOE scorecard from a gradient booster, and they are
+    routinely conflated:
+
+    1. **Coarse binning** — deliberate information loss bought for stability.
+    2. **Additivity** — no interactions representable.
+    3. **Monotonicity** — each characteristic forced to move risk one way.
+
+    Comparing the scorecard against an L2 logistic regression on the same raw
+    features isolates (1), because both are additive. Comparing that logistic
+    regression against the booster isolates (2). Refitting the card without the
+    monotonic constraint isolates (3).
+
+    Args:
+        X_fit: Training features.
+        y_fit: Training default flag.
+        X_test: Out-of-time features.
+        y_test: Out-of-time default flag.
+        reference_predictions: Predictions from the fitted zoo, keyed by model.
+
+    Returns:
+        One row per variant with out-of-time AUC and what it isolates.
+    """
+    from sklearn.metrics import roc_auc_score
+
+    from src.scorecard import Scorecard
+
+    numeric, categorical = list(FEATURES.numeric), list(FEATURES.categorical)
+    rows = [
+        {
+            "variant": "scorecard (8 bins, monotonic) [deployed]",
+            "roc_auc": float(roc_auc_score(y_test, reference_predictions["scorecard_woe_lr"])),
+            "isolates": "the deployed configuration",
+        }
+    ]
+
+    for bins, monotonic, label, isolates in (
+        (8, False, "scorecard (8 bins, unconstrained)", "cost of the monotonicity constraint"),
+        (20, True, "scorecard (20 bins, monotonic)", "cost of coarse binning"),
+    ):
+        card = Scorecard(
+            numeric,
+            categorical,
+            max_bins=bins,
+            min_bin_fraction=0.02 if bins > 8 else 0.05,
+            enforce_monotonic=monotonic,
+        ).fit(X_fit, y_fit)
+        rows.append(
+            {
+                "variant": label,
+                "roc_auc": float(roc_auc_score(y_test, card.predict_proba(X_test))),
+                "isolates": isolates,
+            }
+        )
+
+    rows.append(
+        {
+            "variant": "logistic L2 (continuous, additive)",
+            "roc_auc": float(roc_auc_score(y_test, reference_predictions["logistic_l2"])),
+            "isolates": "no binning at all, still additive",
+        }
+    )
+    rows.append(
+        {
+            "variant": "lightgbm (non-linear)",
+            "roc_auc": float(roc_auc_score(y_test, reference_predictions["lightgbm"])),
+            "isolates": "value of interactions and thresholds",
+        }
+    )
+
+    frame = pd.DataFrame(rows)
+    frame["gap_vs_lightgbm"] = frame["roc_auc"].max() - frame["roc_auc"]
+    return frame
+
+
 def main(quick: bool = False) -> int:
     """Run the experimental programme.
 
@@ -180,6 +263,15 @@ def main(quick: bool = False) -> int:
 
     raw_test = predict_all(zoo, X_test)
     save_table(evaluate_models(raw_test, y_test), "02_discrimination_uncalibrated")
+
+    # Decompose the scorecard's gap to the booster. "The scorecard loses" is
+    # not a finding until you know WHAT it loses to: the coarse binning it does
+    # deliberately for stability, or its inability to represent interactions.
+    # The two have completely different remedies.
+    save_table(
+        scorecard_gap_decomposition(X_fit, y_fit, X_test, y_test, raw_test),
+        "02_scorecard_gap_decomposition",
+    )
 
     # -------------------------------------------------------- 3. calibration
     logger.info("=== 3. Calibration ===")
