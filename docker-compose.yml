@@ -1,0 +1,51 @@
+# Brings up the decision service with its model and calibrator together.
+#
+#   docker compose up --build          start the service
+#   docker compose run --rm batch      score the demo portfolio
+#
+# The model and calibrator are baked into the image from a single training run
+# and validated at build time, so they cannot be separated by a deployment
+# mistake. The audit log and reports are volumes because they are the outputs
+# that must outlive the container.
+
+services:
+  api:
+    build:
+      context: .
+      target: runtime
+    image: credit-risk-decisioning:latest
+    container_name: credit-risk-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Threshold and cost assumptions travel inside the artifact manifest
+      # rather than the environment, so a decision can always be traced to the
+      # assumptions in force when it was made. See RUNBOOK.md to change them.
+      LOG_LEVEL: info
+    volumes:
+      # Append-only audit trail. Must survive the container; in a real
+      # deployment this would be object storage with retention locks.
+      - ./audit:/app/audit
+      - ./reports:/app/reports
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Batch scoring over the same artifact and the same code path as the API.
+  # Runs on demand rather than staying up.
+  batch:
+    build:
+      context: .
+      target: runtime
+    image: credit-risk-decisioning:latest
+    container_name: credit-risk-batch
+    profiles: ["batch"]
+    volumes:
+      - ./audit:/app/audit
+      - ./reports:/app/reports
+      - ./data:/app/data
+    command: ["python", "-m", "scripts.score_batch", "--demo", "--output", "/app/reports/scored_portfolio.csv"]

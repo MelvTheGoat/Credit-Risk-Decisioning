@@ -109,8 +109,16 @@ class ReasonCode:
     protected_basis: bool
 
     def to_dict(self) -> dict[str, object]:
-        """Return the reason code as a plain dictionary for logging or JSON."""
-        return asdict(self)
+        """Return the reason code as a JSON-serialisable dictionary.
+
+        The feature value arrives as a numpy scalar, which ``json.dumps``
+        rejects. Coercing here rather than at each call site means every
+        consumer — audit log, API response, batch output — gets a value it can
+        serialise.
+        """
+        payload = asdict(self)
+        payload["value"] = _jsonable(payload["value"])
+        return payload
 
 
 def _statement_for(feature: str) -> str:
