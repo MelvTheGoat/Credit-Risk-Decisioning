@@ -94,6 +94,40 @@ class TrueCoefficients:
     effect on default in this world. Every risk difference between groups flows
     through legitimate features, and every *unfair* difference flows through the
     recorded-income measurement bias.
+
+    The last three terms are deliberately **non-linear**. Without them the DGP
+    would be linear in the logit, every linear model would be correctly
+    specified, and gradient boosting would have nothing whatsoever to find —
+    which would rig the scorecard-versus-booster comparison in the scorecard's
+    favour and make the headline finding worthless. All three are ordinary
+    credit phenomena:
+
+    * ``utilisation_x_delinquency`` — high utilisation and recent delinquency
+      compound rather than add. Being maxed out matters much more if you have
+      already missed payments.
+    * ``high_dti_cliff`` — affordability rules bite at a threshold, not
+      smoothly.
+    * ``thin_file_penalty`` — a step change in risk for applicants with almost
+      no credit history, which no monotone transform of history length
+      captures.
+
+    Attributes:
+        intercept: Base logit, later solved to hit the target default rate.
+        log_income_true: Effect of true (not recorded) log income.
+        debt_to_income: Effect of standardised debt-to-income.
+        utilisation: Effect of standardised utilisation.
+        n_delinq_24m: Effect per delinquency in the last 24 months, capped at 6.
+        credit_history_months: Effect of standardised log history length.
+        n_inquiries_6m: Effect of standardised recent inquiry count.
+        employment_years: Effect of standardised log employment tenure.
+        loan_to_income: Effect of standardised loan-to-income.
+        age: Effect of standardised age.
+        utilisation_x_delinquency: Interaction between utilisation and capped
+            delinquency count.
+        high_dti_cliff: Step penalty above ``high_dti_threshold``.
+        high_dti_threshold: Debt-to-income level at which the cliff applies.
+        thin_file_penalty: Step penalty below ``thin_file_months``.
+        thin_file_months: Credit history length defining a thin file.
     """
 
     intercept: float = -1.55
@@ -106,6 +140,11 @@ class TrueCoefficients:
     employment_years: float = -0.25
     loan_to_income: float = 0.35
     age: float = -0.20
+    utilisation_x_delinquency: float = 0.42
+    high_dti_cliff: float = 0.38
+    high_dti_threshold: float = 0.45
+    thin_file_penalty: float = 0.30
+    thin_file_months: float = 12.0
 
 
 TRUE_COEFFICIENTS = TrueCoefficients()
@@ -288,6 +327,14 @@ def simulate_loan_book(config: SimulationConfig = DEFAULT_SIMULATION) -> pd.Data
     )
     logit += np.array([HOUSING_EFFECT[h] for h in housing_status])
     logit += np.array([PRODUCT_EFFECT[p] for p in product_type])
+
+    # Non-linear structure: an interaction and two threshold effects. These are
+    # what a gradient booster can find and an additive scorecard cannot.
+    logit += c.utilisation_x_delinquency * (
+        _standardise(utilisation) * np.minimum(n_delinq_24m, 3)
+    )
+    logit += c.high_dti_cliff * (debt_to_income > c.high_dti_threshold)
+    logit += c.thin_file_penalty * (credit_history_months < c.thin_file_months)
 
     # Macro deterioration in the drifted vintages, plus mild seasonality so the
     # vintage curves are not perfectly flat.
