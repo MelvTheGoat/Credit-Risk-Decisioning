@@ -211,16 +211,20 @@ def policy_summary(
     frontier = sweep_thresholds(y, p, costs, exposure_vector)
     empirical = optimal_threshold(frontier)
 
+    approved = p < applied
+    expected_loss_model = float(np.sum(p[approved] * costs.lgd * exposure_vector[approved]))
+    best_net_cost = float(frontier["net_cost"].min())
+
     summary: dict[str, float | str] = {"label": label, **outcome}
     summary["threshold_applied"] = float(applied)
     summary["threshold_analytic"] = float(costs.analytic_threshold)
     summary["threshold_empirical_best"] = empirical
-    summary["net_cost_at_empirical_best"] = float(frontier["net_cost"].min())
-    summary["cost_of_using_analytic"] = float(outcome["net_cost"] - frontier["net_cost"].min())
-    summary["expected_loss_model"] = float(
-        np.sum(p[p < applied] * costs.lgd * exposure_vector[p < applied])
-    )
-    summary["expected_loss_error"] = summary["expected_loss_model"] - outcome["realised_loss"]
+    summary["net_cost_at_empirical_best"] = best_net_cost
+    summary["cost_of_using_analytic"] = outcome["net_cost"] - best_net_cost
+    summary["expected_loss_model"] = expected_loss_model
+    # Gap between what the model thinks it will lose and what it actually
+    # loses. A calibrated model gets this near zero; drift blows it open.
+    summary["expected_loss_error"] = expected_loss_model - outcome["realised_loss"]
     return summary
 
 
