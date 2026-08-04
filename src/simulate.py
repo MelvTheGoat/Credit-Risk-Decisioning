@@ -260,7 +260,10 @@ def simulate_loan_book(config: SimulationConfig = DEFAULT_SIMULATION) -> pd.Data
     is_group_b = rng.random(n) < config.group_b_share
     group = np.where(is_group_b, "B", "A")
 
-    age = np.clip(rng.gamma(shape=9.0, scale=4.2, size=n) + 19.0, 19.0, 78.0)
+    # Right-skewed and centred near 40, which is roughly where an unsecured
+    # consumer application population sits. An older distribution would leave
+    # the younger fairness reporting bands too thin to audit.
+    age = np.clip(rng.gamma(shape=2.6, scale=7.2, size=n) + 21.0, 19.0, 78.0)
     age_band = _assign_age_band(age)
 
     # ------------------------------------------------------------- features --
