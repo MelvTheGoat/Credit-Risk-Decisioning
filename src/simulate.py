@@ -365,6 +365,21 @@ def simulate_loan_book(config: SimulationConfig = DEFAULT_SIMULATION) -> pd.Data
     pd_true = _sigmoid(logit)
     default_true = (rng.random(n) < pd_true).astype(int)
 
+    # When, within the performance window, a defaulter actually goes bad. The
+    # hazard is low in the first couple of months, peaks around months five to
+    # eight, and tails off — the usual shape for unsecured consumer lending,
+    # where very early defaults are rare (and usually fraud) and the bulk
+    # emerge once the account has been carried for a while. Without this,
+    # vintage analysis would be a single point per cohort rather than a curve.
+    months = np.arange(1, config.performance_window_months + 1)
+    hazard = np.exp(-0.5 * ((months - 6.5) / 3.0) ** 2)
+    hazard = hazard / hazard.sum()
+    months_to_default = np.where(
+        default_true == 1,
+        rng.choice(months, size=n, p=hazard),
+        0,
+    )
+
     # --------------------------------------------- legacy approval policy ----
     # A crude legacy scorecard on a subset of the *recorded* features, plus
     # judgemental noise, plus an explicit penalty on group B. It sees
@@ -414,6 +429,9 @@ def simulate_loan_book(config: SimulationConfig = DEFAULT_SIMULATION) -> pd.Data
             "income_true": np.round(income_true, 2),
             "pd_true": pd_true,
             "default_true": default_true,
+            # Months on book at default; 0 for non-defaulters. Drives the
+            # vintage curves in src.monitoring.
+            "months_to_default": months_to_default.astype(int),
             # Legacy policy and the censored label.
             "legacy_score": legacy_score,
             "approved": approved,
