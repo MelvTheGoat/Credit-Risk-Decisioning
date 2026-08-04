@@ -1,0 +1,12 @@
+feature,iv,strength,n_bins,selected
+utilisation,0.5173875730690386,suspiciously strong,7,True
+debt_to_income,0.27998729415612184,medium,7,True
+income_recorded,0.17097050782330644,medium,8,True
+n_delinq_24m,0.13806007237589146,medium,3,True
+age,0.1296706187233678,medium,7,True
+employment_years,0.11242520741355441,medium,7,True
+credit_history_months,0.1052767957006944,medium,7,True
+n_inquiries_6m,0.04424683662114465,weak,4,True
+loan_amount,0.021231808043549277,weak,4,True
+housing_status,0.016714773546256268,unpredictive,4,False
+product_type,0.004917128127667966,unpredictive,3,False

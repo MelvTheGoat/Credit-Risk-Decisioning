@@ -1,0 +1,6 @@
+variant,roc_auc,isolates,gap_vs_lightgbm
+"scorecard (8 bins, monotonic) [deployed]",0.8148460729514209,the deployed configuration,0.023049464983501244
+"scorecard (8 bins, unconstrained)",0.8144468193350325,cost of the monotonicity constraint,0.023448718599889617
+"scorecard (20 bins, monotonic)",0.8226585378241802,cost of coarse binning,0.015237000110741916
+"logistic L2 (continuous, additive)",0.8321204738420189,"no binning at all, still additive",0.005775064092903182
+lightgbm (non-linear),0.8378955379349221,value of interactions and thresholds,0.0

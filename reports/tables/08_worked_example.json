@@ -1,0 +1,130 @@
+{
+  "decision": "decline",
+  "probability_of_default": 0.10715493791761047,
+  "threshold": 0.10714285714285714,
+  "score": 574.5824561883916,
+  "score_band": "C",
+  "expected_loss": 1414.4451805124584,
+  "expected_margin": 1414.266578338505,
+  "expected_value": -0.17860217395332256,
+  "exposure_at_default": 17600.0,
+  "model_version": "experiment-run",
+  "reason_codes": [
+    {
+      "rank": 1,
+      "feature": "income_recorded",
+      "value": 29469.25,
+      "contribution": 30.82095289591291,
+      "statement": "The income recorded on your application is low relative to the amount requested",
+      "protected_basis": false
+    },
+    {
+      "rank": 2,
+      "feature": "debt_to_income",
+      "value": 0.3579,
+      "contribution": 29.19366919855547,
+      "statement": "Your total debt repayments are high relative to your income",
+      "protected_basis": false
+    },
+    {
+      "rank": 3,
+      "feature": "utilisation",
+      "value": 0.253,
+      "contribution": 24.217779185189016,
+      "statement": "Your balances are high relative to your available credit limits",
+      "protected_basis": false
+    },
+    {
+      "rank": 4,
+      "feature": "employment_years",
+      "value": 1.49,
+      "contribution": 19.767750074647026,
+      "statement": "You have been in your current employment for a short time",
+      "protected_basis": false
+    }
+  ],
+  "features": {
+    "income_recorded": 29469.25,
+    "debt_to_income": 0.3579,
+    "utilisation": 0.253,
+    "n_delinq_24m": 1,
+    "credit_history_months": 43.3,
+    "n_inquiries_6m": 1,
+    "employment_years": 1.49,
+    "loan_amount": 17600.0,
+    "age": 35.7,
+    "housing_status": "own",
+    "product_type": "card"
+  },
+  "row_index": 5972,
+  "application_id": 27565,
+  "reason_codes_scorecard": [
+    {
+      "rank": 1,
+      "feature": "income_recorded",
+      "value": 29469.25,
+      "contribution": 30.82095289591291,
+      "statement": "The income recorded on your application is low relative to the amount requested",
+      "protected_basis": false
+    },
+    {
+      "rank": 2,
+      "feature": "debt_to_income",
+      "value": 0.3579,
+      "contribution": 29.19366919855547,
+      "statement": "Your total debt repayments are high relative to your income",
+      "protected_basis": false
+    },
+    {
+      "rank": 3,
+      "feature": "utilisation",
+      "value": 0.253,
+      "contribution": 24.217779185189016,
+      "statement": "Your balances are high relative to your available credit limits",
+      "protected_basis": false
+    },
+    {
+      "rank": 4,
+      "feature": "employment_years",
+      "value": 1.49,
+      "contribution": 19.767750074647026,
+      "statement": "You have been in your current employment for a short time",
+      "protected_basis": false
+    }
+  ],
+  "reason_codes_shap": [
+    {
+      "rank": 1,
+      "feature": "income_recorded",
+      "value": 29469.25,
+      "contribution": 0.5382215125095443,
+      "statement": "The income recorded on your application is low relative to the amount requested",
+      "protected_basis": false
+    },
+    {
+      "rank": 2,
+      "feature": "loan_amount",
+      "value": 17600.0,
+      "contribution": 0.27859985740333293,
+      "statement": "The amount requested is high relative to your circumstances",
+      "protected_basis": false
+    },
+    {
+      "rank": 3,
+      "feature": "debt_to_income",
+      "value": 0.3579,
+      "contribution": 0.21773125211765446,
+      "statement": "Your total debt repayments are high relative to your income",
+      "protected_basis": false
+    },
+    {
+      "rank": 4,
+      "feature": "n_delinq_24m",
+      "value": 1,
+      "contribution": 0.1944506253566827,
+      "statement": "There are recent missed or late payments on your credit accounts",
+      "protected_basis": false
+    }
+  ],
+  "adverse_action_notice": "NOTICE OF ADVERSE ACTION\n\nWe are unable to approve your application for credit at this time.\n\nThe principal reasons for our decision are:\n  1. The income recorded on your application is low relative to the amount requested\n  2. Your total debt repayments are high relative to your income\n  3. Your balances are high relative to your available credit limits\n  4. You have been in your current employment for a short time\n\nDecision reference: model experiment-run, cutoff 0.1071.\n\nYou have the right to a statement of the specific reasons for this\ndecision and to obtain a free copy of any credit report used."
+}

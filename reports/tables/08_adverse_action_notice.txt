@@ -1,0 +1,14 @@
+NOTICE OF ADVERSE ACTION
+
+We are unable to approve your application for credit at this time.
+
+The principal reasons for our decision are:
+  1. The income recorded on your application is low relative to the amount requested
+  2. Your total debt repayments are high relative to your income
+  3. Your balances are high relative to your available credit limits
+  4. You have been in your current employment for a short time
+
+Decision reference: model experiment-run, cutoff 0.1071.
+
+You have the right to a statement of the specific reasons for this
+decision and to obtain a free copy of any credit report used.

@@ -1,10 +1,19 @@
 # Data — never committed. Reproduce with `python -m src.ingest`.
 data/
 
-# Generated artifacts and reports
+# Serialised models. Rebuilt by `python -m scripts.run_experiments` and by the
+# Docker build; binary, versioned, and not useful in review.
 artifacts/
-reports/
+
+# Append-only decision log. Contains decisions about (synthetic) applicants and
+# never belongs in source control.
 audit/
+
+# Report outputs. The tables and figures ARE committed: they are the evidence
+# behind every number quoted in README.md, they are small (~590K), and the
+# README's figures have to resolve for it to render. Bulk scoring output is not.
+reports/scored_portfolio.csv
+reports/*.parquet
 
 # Python
 __pycache__/

@@ -1,0 +1,2 @@
+n_applications,approval_rate,approval_rate_group_a,approval_rate_group_b,default_rate_population,default_rate_approved,default_rate_declined,default_rate_group_a,default_rate_group_b,selection_gap,mean_pd_true_approved,mean_pd_true_declined
+30000.0,0.7,0.7931192924013555,0.571212963698467,0.1996,0.12414285714285714,0.37566666666666665,0.16305783699959794,0.25013901024704105,0.2515238095238095,0.12391177346710401,0.3775390030230138
