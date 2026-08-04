@@ -46,8 +46,8 @@ from src.api.schemas import (
     MetricsResponse,
     ModelInfoResponse,
 )
-from src.artifacts import ArtifactMismatchError, ArtifactNotFoundError
-from src.config import ARTIFACT_DIR, DEFAULT_COSTS
+from src.artifacts import ArtifactMismatchError, ArtifactNotFoundError, resolve_artifact_root
+from src.config import DEFAULT_COSTS
 from src.engine import DecisionEngine
 from src.monitoring import classify_psi, population_stability_index, score_distribution_report
 
@@ -86,11 +86,16 @@ class ServiceState:
             manifest.threshold,
         )
 
-        reference_path = ARTIFACT_DIR / manifest.version / REFERENCE_SCORES_FILENAME
+        # Always reassign, including to None. Leaving a previously loaded
+        # reference in place would mean that reloading or rolling back to a
+        # version without reference scores kept comparing against a different
+        # model's distribution, and reporting the result as this model's PSI.
+        reference_path = resolve_artifact_root(None) / manifest.version / REFERENCE_SCORES_FILENAME
         if reference_path.exists():
             self.reference_scores = np.load(reference_path)
             logger.info("Loaded %d reference scores for drift monitoring", len(self.reference_scores))
         else:
+            self.reference_scores = None
             logger.warning(
                 "No reference scores at %s; /metrics will report PSI as unavailable", reference_path
             )

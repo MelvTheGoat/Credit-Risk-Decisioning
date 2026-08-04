@@ -107,6 +107,21 @@ class BundleManifest:
         return cls(**{k: v for k, v in payload.items() if k in known})
 
 
+def resolve_artifact_root(directory: Path | None = None) -> Path:
+    """Resolve the artifact root, defaulting to the configured directory.
+
+    Resolved at call time rather than bound as a default argument, so tests and
+    alternative deployments can redirect it without reimporting the module.
+
+    Args:
+        directory: Explicit root, or ``None`` for the configured default.
+
+    Returns:
+        The artifact root directory.
+    """
+    return ARTIFACT_DIR if directory is None else directory
+
+
 def _sha256(path: Path) -> str:
     """SHA-256 digest of a file."""
     digest = hashlib.sha256()
@@ -154,7 +169,7 @@ def save_bundle(
     calibrator: Any,
     manifest: BundleManifest,
     scorecard: Any | None = None,
-    directory: Path = ARTIFACT_DIR,
+    directory: Path | None = None,
     set_current: bool = True,
 ) -> Path:
     """Write a bundle to a versioned directory.
@@ -170,7 +185,8 @@ def save_bundle(
     Returns:
         Path to the version directory.
     """
-    version_directory = directory / manifest.version
+    root = resolve_artifact_root(directory)
+    version_directory = root / manifest.version
     version_directory.mkdir(parents=True, exist_ok=True)
 
     # The training_run_id travels *inside* each file as well as in the
@@ -193,13 +209,13 @@ def save_bundle(
     (version_directory / MANIFEST_FILENAME).write_text(manifest.to_json())
 
     if set_current:
-        (directory / CURRENT_POINTER).write_text(manifest.version)
+        (root / CURRENT_POINTER).write_text(manifest.version)
 
     logger.info("Saved bundle %s to %s", manifest.version, version_directory)
     return version_directory
 
 
-def resolve_version(version: str | None = None, directory: Path = ARTIFACT_DIR) -> str:
+def resolve_version(version: str | None = None, directory: Path | None = None) -> str:
     """Resolve a version string, defaulting to the current pointer.
 
     Args:
@@ -212,12 +228,13 @@ def resolve_version(version: str | None = None, directory: Path = ARTIFACT_DIR) 
     Raises:
         ArtifactNotFoundError: If no version is given and no pointer exists.
     """
+    root = resolve_artifact_root(directory)
     if version:
         return version
-    pointer = directory / CURRENT_POINTER
+    pointer = root / CURRENT_POINTER
     if not pointer.exists():
         raise ArtifactNotFoundError(
-            f"No version requested and no {CURRENT_POINTER} in {directory}. "
+            f"No version requested and no {CURRENT_POINTER} in {root}. "
             "Train a model first with: python -m scripts.run_experiments"
         )
     return pointer.read_text().strip()
@@ -225,7 +242,7 @@ def resolve_version(version: str | None = None, directory: Path = ARTIFACT_DIR) 
 
 def load_bundle(
     version: str | None = None,
-    directory: Path = ARTIFACT_DIR,
+    directory: Path | None = None,
     verify_hashes: bool = True,
 ) -> ModelBundle:
     """Load a bundle, refusing to return a mismatched or corrupted pair.
@@ -244,13 +261,14 @@ def load_bundle(
             training run identifiers, if either disagrees with the manifest, or
             if a file hash does not match.
     """
-    resolved = resolve_version(version, directory)
-    version_directory = directory / resolved
+    root = resolve_artifact_root(directory)
+    resolved = resolve_version(version, root)
+    version_directory = root / resolved
 
     if not version_directory.exists():
-        available = sorted(p.name for p in directory.glob("*") if p.is_dir())
+        available = sorted(p.name for p in root.glob("*") if p.is_dir())
         raise ArtifactNotFoundError(
-            f"Artifact version {resolved!r} not found in {directory}. Available: {available}"
+            f"Artifact version {resolved!r} not found in {root}. Available: {available}"
         )
 
     manifest_path = version_directory / MANIFEST_FILENAME
@@ -320,7 +338,7 @@ def load_bundle(
     )
 
 
-def list_versions(directory: Path = ARTIFACT_DIR) -> list[dict[str, Any]]:
+def list_versions(directory: Path | None = None) -> list[dict[str, Any]]:
     """List available artifact versions, newest first.
 
     Args:
@@ -330,16 +348,17 @@ def list_versions(directory: Path = ARTIFACT_DIR) -> list[dict[str, Any]]:
         One entry per version with its identifying metadata and whether it is
         the current pointer target.
     """
-    if not directory.exists():
+    root = resolve_artifact_root(directory)
+    if not root.exists():
         return []
 
     try:
-        current = resolve_version(None, directory)
+        current = resolve_version(None, root)
     except ArtifactNotFoundError:
         current = ""
 
     entries = []
-    for path in sorted(directory.glob("*"), reverse=True):
+    for path in sorted(root.glob("*"), reverse=True):
         manifest_path = path / MANIFEST_FILENAME
         if not path.is_dir() or not manifest_path.exists():
             continue
@@ -358,7 +377,7 @@ def list_versions(directory: Path = ARTIFACT_DIR) -> list[dict[str, Any]]:
     return entries
 
 
-def set_current_version(version: str, directory: Path = ARTIFACT_DIR) -> None:
+def set_current_version(version: str, directory: Path | None = None) -> None:
     """Point ``current.txt`` at a version, after checking it loads cleanly.
 
     This is the rollback mechanism. The bundle is loaded and validated before
@@ -372,8 +391,9 @@ def set_current_version(version: str, directory: Path = ARTIFACT_DIR) -> None:
         ArtifactNotFoundError: If the version does not exist.
         ArtifactMismatchError: If the version fails validation.
     """
-    load_bundle(version, directory)
-    (directory / CURRENT_POINTER).write_text(version)
+    root = resolve_artifact_root(directory)
+    load_bundle(version, root)
+    (root / CURRENT_POINTER).write_text(version)
     logger.info("Current version set to %s", version)
 
 

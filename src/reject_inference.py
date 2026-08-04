@@ -80,6 +80,33 @@ The Heckman correction removed essentially none of the bias in either regime
 was constructed for it**. A real deployment would not have one. That is a
 strong argument against the method in this setting, not against this
 implementation of it.
+
+A trap worth knowing about: weak models manufacture apparent uplift
+---------------------------------------------------------------------
+Measured on the *same* MAR book, the true reject-to-approve uplift depends on
+how much training data the scoring model had:
+
+=================  ==============  ====================
+Training rows      Measured uplift Baseline reject bias
+=================  ==============  ====================
+4,000              2.25            -0.120
+10,000             1.21            -0.059
+20,000             1.09            -0.051
+=================  ==============  ====================
+
+Nothing about the selection mechanism changed. What changed is the model. A
+weak model leaves risk heterogeneity *inside* each score band, and because the
+legacy policy sorted on that heterogeneity, rejects within a band genuinely
+are worse — so the uplift is real, measurable, and entirely an artefact of the
+scoring model rather than of selection on unobservables. As the model improves
+it absorbs what the policy knew, and the uplift collapses toward 1.
+
+The practical consequence is uncomfortable: **measuring an uplift of 2x on
+your own book is not evidence that you need reject inference.** It is equally
+consistent with your model being underpowered, in which case the fix is a
+better model and more data, and applying reject inference on top will
+overcorrect. The two explanations are not distinguishable from the uplift
+figure alone.
 """
 
 from __future__ import annotations

@@ -1,0 +1,202 @@
+# Continuous integration for the credit risk decisioning system.
+#
+# Everything here runs on synthetic data. Nothing in this pipeline reaches the
+# network for a dataset: the UCI archive host is not reliably reachable from
+# CI, and a build that fails because a third-party server is down teaches
+# nobody anything. The synthetic generator carries the ground truth the tests
+# actually need anyway.
+#
+# The calibration gate is the job that matters most. A change can leave AUC
+# untouched, or nudge it upward, while destroying the calibration that expected
+# loss and the cutoff both depend on. No accuracy-focused test would notice, so
+# calibration is pinned to a committed baseline and a regression fails the
+# build.
+
+name: CI
+
+on:
+  push:
+    branches: ["main", "master", "claude/**"]
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+env:
+  PYTHONHASHSEED: "0"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  lint:
+    name: Lint and type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: ruff
+        run: ruff check src/ tests/ scripts/
+
+      - name: ruff format check
+        run: ruff format --check src/ tests/ scripts/
+        continue-on-error: true
+
+      - name: mypy
+        run: mypy src/
+
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run tests on synthetic data
+        run: pytest tests/ -v --durations=15
+
+  calibration-gate:
+    name: Calibration regression gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # Fails if Brier, ECE, MCE or the calibration slope has drifted beyond
+      # tolerance against tests/calibration_baseline.json, and separately if
+      # any model breaches the absolute servability limits. The absolute limits
+      # exist so the gate cannot be defeated by regenerating the baseline
+      # against a model that should never have shipped.
+      - name: Calibration gate
+        run: pytest tests/test_calibration_gate.py -v
+
+      - name: Explain a failure
+        if: failure()
+        run: |
+          echo "::error::Calibration regressed against tests/calibration_baseline.json."
+          echo "AUC can be unchanged while calibration breaks; expected loss, provisioning"
+          echo "and the cost-optimal cutoff all depend on calibration, not ranking."
+          echo ""
+          echo "If the change is intended, regenerate the baseline and commit it WITH A REASON:"
+          echo "  python -m tests.test_calibration_gate --update"
+          echo "A baseline move is a governance event, not housekeeping."
+
+  end-to-end:
+    name: Pipeline and service smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # Also asserts that the saved artifact reproduces the experiment's own
+      # predictions exactly; the script exits non-zero if it does not.
+      - name: Train and build the artifact
+        run: python -m scripts.run_experiments --quick
+
+      - name: Artifact loads and its versions match
+        run: |
+          python - <<'PY'
+          from src.artifacts import load_bundle, list_versions
+          bundle = load_bundle()
+          print("version:", bundle.manifest.version)
+          print("run:", bundle.manifest.training_run_id)
+          print("threshold:", bundle.manifest.threshold)
+          assert bundle.manifest.feature_names, "manifest has no feature names"
+          assert list_versions(), "no versions listed"
+          PY
+
+      - name: Batch scoring runs through the shared code path
+        run: python -m scripts.score_batch --demo --output /tmp/scored.csv
+
+      - name: Service starts and decides
+        run: |
+          python - <<'PY'
+          from fastapi.testclient import TestClient
+          from src.api.main import app
+
+          applicant = {
+              "income_recorded": 21000.0, "debt_to_income": 0.85, "utilisation": 1.05,
+              "n_delinq_24m": 4, "credit_history_months": 6.0, "n_inquiries_6m": 5,
+              "employment_years": 0.4, "loan_amount": 15000.0, "age": 26.0,
+              "housing_status": "rent", "product_type": "card",
+          }
+          with TestClient(app) as client:
+              assert client.get("/health").json()["status"] == "ok"
+              assert client.get("/model-info").json()["threshold"] > 0
+              body = client.post(
+                  "/decision", json={"application_id": "CI-1", "features": applicant}
+              ).json()
+              assert body["decision"] in {"approve", "decline", "refer"}
+              assert body["input_hash"]
+              print("decision:", body["decision"], "pd:", body["probability_of_default"])
+              assert client.get("/metrics").json()["n_decisions"] >= 1
+          PY
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: reports/
+          retention-days: 14
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The build trains the model and then fails if the resulting bundle
+      # cannot be loaded, so a model/calibrator mismatch is caught here rather
+      # than in production.
+      - name: Build image
+        run: docker build -t credit-risk-decisioning:ci .
+
+      - name: Container serves decisions
+        run: |
+          docker run -d --name credit-risk-ci -p 8000:8000 credit-risk-decisioning:ci
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/health; then break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8000/health
+          curl -fsS http://localhost:8000/model-info
+          docker rm -f credit-risk-ci
