@@ -360,9 +360,9 @@ def load_raw(path: Path) -> pd.DataFrame:
         if "LIMIT_BAL" not in frame.columns and "X1" in frame.columns:
             frame = pd.read_csv(path, header=1)
     else:
-        engine = "xlrd" if suffix == ".xls" else "openpyxl"
+        engine: str = "xlrd" if suffix == ".xls" else "openpyxl"
         try:
-            frame = pd.read_excel(path, header=1, engine=engine)
+            frame = pd.read_excel(path, sheet_name=0, header=1, engine=engine)  # type: ignore[call-overload]
         except ImportError as error:
             raise SchemaError(
                 f"Reading {suffix} requires the '{engine}' package. "
