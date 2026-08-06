@@ -25,12 +25,19 @@ import logging
 import sys
 from pathlib import Path
 
+# Allow `python scripts/score_batch.py` as well as `python -m scripts.score_batch`.
+# Running a file directly puts the script's own directory on sys.path, not the
+# repo root, so the `src` imports below would fail with a bare
+# ModuleNotFoundError that gives the caller no hint about the fix.
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import pandas as pd
 
-from src.api.audit import AuditLog
-from src.artifacts import ArtifactMismatchError, ArtifactNotFoundError
-from src.config import DEFAULT_COSTS, SYNTHETIC_FEATURES, ensure_directories
-from src.engine import DecisionEngine
+from src.api.audit import AuditLog  # noqa: E402
+from src.artifacts import ArtifactMismatchError, ArtifactNotFoundError  # noqa: E402
+from src.config import DEFAULT_COSTS, SYNTHETIC_FEATURES, ensure_directories  # noqa: E402
+from src.engine import DecisionEngine  # noqa: E402
 
 logger = logging.getLogger("score_batch")
 

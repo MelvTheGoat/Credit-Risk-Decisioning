@@ -220,21 +220,35 @@ class ShapExplainer:
         self.feature_names: list[str] = list(model.feature_names)
         self.background = background[self.feature_names].head(max_background).copy()
 
+        # Duck-type on the *public* contract, not on a LightGBM internal. A
+        # model that can hand us a prepared frame and expose a fitted booster
+        # gets the exact TreeExplainer; anything else falls back to the
+        # model-agnostic path. Reaching for `inner.booster_` here would couple
+        # this module to LightGBM's attribute names and break silently on a
+        # refactor.
         inner = getattr(model, "model", None)
-        if inner is not None and hasattr(inner, "booster_"):
-            prepared = model._prepare(self.background, fitting=False)
+        if callable(getattr(model, "prepare", None)) and inner is not None:
             self.explainer: Any = shap.TreeExplainer(inner)
-            self._prepare = lambda X: model._prepare(X, fitting=False)
-            self._background_prepared = prepared
+            self._background_prepared = model.prepare(self.background)
             self.kind = "tree"
         else:
-            self._prepare = lambda X: X[self.feature_names]
             self.explainer = shap.Explainer(
                 lambda data: model.predict_proba(pd.DataFrame(data, columns=self.feature_names)),
                 self.background.to_numpy(),
             )
             self._background_prepared = self.background
             self.kind = "agnostic"
+
+    def _prepare(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Prepare a frame the same way the wrapped model does.
+
+        A method rather than a stored lambda: a closure over ``model`` makes the
+        whole explainer unpicklable, which matters the moment anyone tries to
+        cache one alongside a model artifact.
+        """
+        if self.kind == "tree":
+            return self.model.prepare(X)
+        return X[self.feature_names]
 
     def shap_values(self, X: pd.DataFrame) -> np.ndarray:
         """Compute SHAP values.

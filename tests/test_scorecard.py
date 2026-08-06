@@ -175,3 +175,49 @@ def test_sample_weights_change_the_fit(
     weighted.fit(fit[columns], y, sample_weight=weights)
 
     assert weighted.predict_proba(fit[columns]).mean() > unweighted.predict_proba(fit[columns]).mean()
+
+
+def test_prepare_refuses_before_fit(features: object) -> None:
+    """A model asked to prepare a frame before fitting must refuse.
+
+    Silently inferring categories from the frame in front of it is the exact
+    corruption the stored ordering exists to prevent: the codes would come from
+    the scoring batch rather than the training data.
+    """
+    from sklearn.exceptions import NotFittedError
+
+    from src.models import LightGBMModel
+
+    model = LightGBMModel(list(features.numeric), list(features.categorical))  # type: ignore[attr-defined]
+    frame = pd.DataFrame([dict.fromkeys(features.numeric, 1.0)])  # type: ignore[attr-defined]
+    for name in features.categorical:  # type: ignore[attr-defined]
+        frame[name] = "own"
+    with pytest.raises(NotFittedError, match="call fit"):
+        model.prepare(frame)
+
+
+def test_prepare_uses_training_categories_not_batch_categories(
+    approved_splits: dict[str, pd.DataFrame], features: object
+) -> None:
+    """Category codes must come from training, whatever the scoring batch holds.
+
+    LightGBM encodes categoricals by integer code. If a scoring batch is missing
+    a level, re-inferring categories shifts every code and the model scores
+    against the wrong encoding — silently, with no error and no warning.
+    """
+    from src.models import LightGBMModel
+
+    columns = features.model_features  # type: ignore[attr-defined]
+    fit = approved_splits["fit"]
+    model = LightGBMModel(list(features.numeric), list(features.categorical))  # type: ignore[attr-defined]
+    model.fit(fit[columns], fit["default_observed"].to_numpy())
+
+    trained_categories = dict(model.categories_)
+
+    # A batch containing only one housing status, which would infer a
+    # single-category ordering if categories were re-derived.
+    narrow = fit[fit["housing_status"] == "rent"].head(50)[columns]
+    prepared = model.prepare(narrow)
+
+    assert list(prepared["housing_status"].cat.categories) == trained_categories["housing_status"]
+    assert model.categories_ == trained_categories, "prepare() must not mutate fitted state"

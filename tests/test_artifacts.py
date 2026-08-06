@@ -105,16 +105,25 @@ def test_tampered_file_is_refused(artifact_dir: Path) -> None:
 
 
 def test_hash_check_can_be_disabled(artifact_dir: Path) -> None:
-    """Verification is on by default, but must be explicitly skippable."""
+    """The same bundle must fail with verification on and load with it off.
+
+    Corrupting the artifact itself would break unpickling, so the load would
+    fail for the wrong reason and the test would pass without proving anything.
+    Instead we leave the files intact and falsify the *recorded* hash: the
+    bundle is genuinely loadable, and only the verification step objects. That
+    isolates the flag.
+    """
     _make_bundle(artifact_dir, "v1")
-    with (artifact_dir / "v1" / "model.joblib").open("ab") as handle:
-        handle.write(b" ")
-    with pytest.raises(ArtifactMismatchError):
+    manifest_path = artifact_dir / "v1" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["file_hashes"]["model.joblib"] = "0" * 64
+    manifest_path.write_text(json.dumps(manifest))
+
+    with pytest.raises(ArtifactMismatchError, match="hash mismatch"):
         load_bundle("v1", directory=artifact_dir)
-    # Truncating the file would break unpickling, so only assert the hash path
-    # is what raised, by confirming a fresh bundle loads with checks off.
-    _make_bundle(artifact_dir, "v2")
-    assert load_bundle("v2", directory=artifact_dir, verify_hashes=False) is not None
+
+    bundle = load_bundle("v1", directory=artifact_dir, verify_hashes=False)
+    assert bundle.manifest.version == "v1"
 
 
 def test_manifest_disagreement_is_refused(artifact_dir: Path) -> None:

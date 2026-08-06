@@ -112,6 +112,21 @@ def test_input_hash_is_stable_and_sensitive() -> None:
     assert hash_features(base) != hash_features({"a": 2, "b": "x"})
 
 
+def test_input_hash_ignores_float_representation_noise() -> None:
+    """0.1 + 0.2 and 0.3 describe the same application and must hash alike.
+
+    Without rounding, the digest depends on a float's exact repr, so an
+    applicant re-submitted through a caller that accumulates differently would
+    fail an audit lookup by hash while being the identical application.
+    """
+    assert hash_features({"utilisation": 0.1 + 0.2}) == hash_features({"utilisation": 0.3})
+
+
+def test_input_hash_still_separates_genuinely_different_values() -> None:
+    """Rounding must not be so coarse that real differences collide."""
+    assert hash_features({"utilisation": 0.3}) != hash_features({"utilisation": 0.30001})
+
+
 def test_scoring_is_deterministic(
     engine: DecisionEngine, approved_splits: dict[str, pd.DataFrame], features: Any
 ) -> None:

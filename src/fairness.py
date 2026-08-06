@@ -259,15 +259,6 @@ def fairness_cost_frontier(
     deployment proposal, and the recommended operating point in ``README.md``
     is not on the parity end of it.
 
-    Args:
-        y: Realised default flag.
-        p: Calibrated probability of default.
-        groups: Protected attribute value per applicant.
-        base_threshold: The single cost-optimal cutoff.
-        costs: Cost parameters.
-        exposure: Per-applicant exposure, or ``None``.
-        n_points: Number of lambda values.
-
     Reading the output honestly — two cautions that the numbers on this book
     make necessary:
 

@@ -33,3 +33,8 @@ htmlcov/
 .DS_Store
 .idea/
 .vscode/
+
+# Generated from CODE_WALKTHROUGH.md by scripts/render_walkthrough.py.
+# The markdown is the source; the PDF is build output and would otherwise
+# re-diff as an opaque binary blob on every regeneration.
+CODE_WALKTHROUGH.pdf

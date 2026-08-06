@@ -8,7 +8,7 @@
     "best_model": "lightgbm",
     "best_net_cost": -2506563.0,
     "scorecard_net_cost": -2168367.0,
-    "artifact_version": "20260804T154131Z",
+    "artifact_version": "20260806T100656Z",
     "score_psi": 0.10337762135076563
   }
 }

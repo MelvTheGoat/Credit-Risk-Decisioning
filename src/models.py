@@ -43,6 +43,7 @@ import pandas as pd
 from lightgbm import LGBMClassifier
 from sklearn.base import BaseEstimator
 from sklearn.compose import ColumnTransformer
+from sklearn.exceptions import NotFittedError
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import RepeatedStratifiedKFold
@@ -138,12 +139,47 @@ class LightGBMModel:
         """Ordered model input columns."""
         return [*self.numeric_features, *self.categorical_features]
 
-    def _prepare(self, X: pd.DataFrame, fitting: bool) -> pd.DataFrame:
-        """Coerce categoricals to a stable category dtype shared across splits."""
+    def _fit_categories(self, X: pd.DataFrame) -> None:
+        """Record the category ordering observed at fit time.
+
+        Separate from :meth:`prepare` so that preparing a frame is a pure
+        function of already-fitted state. Folding the two together — a
+        ``prepare(X, fitting=True)`` that quietly rewrites ``categories_`` —
+        makes it possible to re-derive categories from a scoring batch, which
+        is precisely the corruption the stored ordering exists to prevent.
+
+        Args:
+            X: Training features.
+        """
+        for column in self.categorical_features:
+            self.categories_[column] = sorted(X[column].astype(str).unique())
+
+    def prepare(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Coerce a frame to the dtypes and column order the booster expects.
+
+        Public because explanation tooling needs the *prepared* frame, not the
+        raw one: LightGBM encodes categoricals by their integer codes, so a
+        SHAP explainer handed raw strings would compute contributions against a
+        different encoding than the model used.
+
+        Args:
+            X: Features to prepare.
+
+        Returns:
+            Frame with model columns in order, categoricals on the stored
+            category ordering, numerics coerced.
+
+        Raises:
+            NotFittedError: If categorical orderings have not been recorded yet.
+        """
+        if self.categorical_features and not self.categories_:
+            raise NotFittedError(
+                "Category orderings are not available; call fit() before prepare(). "
+                "Preparing with inferred categories would encode this frame "
+                "differently from the training data."
+            )
         prepared = X[self.feature_names].copy()
         for column in self.categorical_features:
-            if fitting:
-                self.categories_[column] = sorted(prepared[column].astype(str).unique())
             prepared[column] = pd.Categorical(
                 prepared[column].astype(str), categories=self.categories_[column]
             )
@@ -164,13 +200,14 @@ class LightGBMModel:
         Returns:
             Self.
         """
-        prepared = self._prepare(X, fitting=True)
+        self._fit_categories(X)
+        prepared = self.prepare(X)
         self.model.fit(prepared, np.asarray(y).astype(int), sample_weight=sample_weight)
         return self
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
         """Return P(default)."""
-        probabilities = np.asarray(self.model.predict_proba(self._prepare(X, fitting=False)))
+        probabilities = np.asarray(self.model.predict_proba(self.prepare(X)))
         return probabilities[:, 1]
 
     def feature_importance(self) -> pd.DataFrame:

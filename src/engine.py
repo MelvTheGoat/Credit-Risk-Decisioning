@@ -41,6 +41,11 @@ from src.policy import assign_score_band
 
 logger = logging.getLogger(__name__)
 
+# Decimal places retained when hashing applicant inputs. Six is finer than any
+# feature this system takes (the most precise are ratios recorded to four) while
+# being coarse enough to be insensitive to float representation.
+HASH_FLOAT_PRECISION = 6
+
 
 def hash_features(features: dict[str, Any]) -> str:
     """Hash an applicant's inputs for the audit trail.
@@ -51,13 +56,24 @@ def hash_features(features: dict[str, Any]) -> str:
     original application can recompute the hash and prove which inputs produced
     which decision.
 
+    Floats are rounded to :data:`HASH_FLOAT_PRECISION` decimals before
+    serialising. Without that, the digest depends on the exact repr of a float,
+    and a value arriving as ``0.1 + 0.2`` hashes differently from ``0.3``
+    despite describing the same application. For a record that has to be
+    reconstructible years later, tying the hash to floating-point trailing
+    digits is a needless fragility.
+
     Args:
         features: Applicant feature values.
 
     Returns:
         Hexadecimal SHA-256 digest of the canonicalised inputs.
     """
-    canonical = json.dumps(features, sort_keys=True, default=str)
+    rounded = {
+        key: round(value, HASH_FLOAT_PRECISION) if isinstance(value, float) else value
+        for key, value in features.items()
+    }
+    canonical = json.dumps(rounded, sort_keys=True, default=str)
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 

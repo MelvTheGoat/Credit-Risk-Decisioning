@@ -227,7 +227,11 @@ def _merge_small_and_monotonic(
         counts, rates = bin_stats(edges)
         for b in range(len(counts)):
             too_small = counts[b] < min_count
-            degenerate = counts[b] > 0 and (rates[b] in (0.0, 1.0))
+            # Exact equality is correct here — these are means of 0/1 arrays,
+            # so a pure bin is exactly 0.0 or 1.0 with no rounding involved.
+            # Written out rather than as `in (0.0, 1.0)`, which reads like a
+            # float-comparison mistake even though it is not.
+            degenerate = counts[b] > 0 and (rates[b] == 0.0 or rates[b] == 1.0)
             if too_small or degenerate:
                 # Drop the edge that fuses this bin with its smaller neighbour.
                 if b == 0:

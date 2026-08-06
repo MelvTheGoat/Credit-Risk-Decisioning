@@ -13,7 +13,11 @@ dependencies = [
     "scikit-learn>=1.4",
     "scipy>=1.11",
     "lightgbm>=4.1",
-    "shap>=0.44",
+    # Upper-bounded deliberately: SHAP changed the return shape of
+    # TreeExplainer.shap_values for binary classifiers between minor versions
+    # (one matrix per class vs one matrix). src.explain handles both, but an
+    # unbounded range invites a third shape nobody has tested against.
+    "shap>=0.44,<0.50",
     "matplotlib>=3.8",
     "imbalanced-learn>=0.12",
     "statsmodels>=0.14",
